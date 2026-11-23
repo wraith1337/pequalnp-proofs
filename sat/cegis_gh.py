@@ -54,7 +54,7 @@ def extract(sol, k):
             for kk in range(j+1,node):
                 if s[(i,j,kk)] in m: found=(j,kk); break
             if found: break
-        out.append(('or' if o[i] in m else 'and', found))
+        out.append(('and' if o[i] in m else 'or', found))
     return out
 
 def ev(gates, t):
@@ -77,15 +77,13 @@ while time.time()-t0 < BUDGET:
     it+=1
     cls,s,o = build(K, subset)
     with Cadical195(bootstrap_with=cls) as sol:
-        sat = sol.solve_limited()   # allow interruption-friendly
+        sat = sol.solve()
+        gates = extract(sol, K) if sat else None
     el = time.time()-t0
     if not sat:
         print(f"iter {it}: UNSAT on subset {len(subset)} ({el:.0f}s)", flush=True)
-        if len(subset)==NT:
-            print("FULL UNSAT", flush=True); break
-        subset = list(range(NT))
-        continue
-    gates = extract(sol, K)
+        print("UNSAT (subset implies full impossibility)", flush=True)
+        break
     bad = [t for t in range(NT) if ev(gates,t) != (1 if target(t) else 0)]
     if not bad:
         print(f"CIRCUIT FOUND k={K} ({el:.0f}s)", flush=True)

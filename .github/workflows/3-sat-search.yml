@@ -1,0 +1,19 @@
+name: sat-search
+on:
+  push:
+    branches: [dev/sat]
+jobs:
+  sat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install python-sat
+      - run: bash sat/jobs.sh 2>&1 | tee sat/results.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sat-results
+          path: sat/results.log

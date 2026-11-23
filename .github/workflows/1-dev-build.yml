@@ -1,0 +1,51 @@
+name: dev-build
+on:
+  push:
+    branches: ['dev/**']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dev-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache Lean toolchain and build outputs
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.elan
+            lean/.lake
+          key: lean-${{ runner.os }}-${{ hashFiles('lean/lean-toolchain', 'lean/lake-manifest.json') }}
+      - name: Install the pinned Lean toolchain
+        run: |
+          set -eu
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/elan" toolchain install "$(cat lean/lean-toolchain)"
+      - name: Fetch the prebuilt Mathlib
+        working-directory: lean
+        run: lake exe cache get
+      - name: Swap space for the build
+        run: |
+          set -eu
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /usr/share/swift /opt/hostedtoolcache/CodeQL || true
+          sudo fallocate -l 12G /pnp-swap && sudo chmod 600 /pnp-swap
+          sudo mkswap -q /pnp-swap && sudo swapon /pnp-swap
+          free -m
+      - name: Build the dev module
+        working-directory: lean
+        timeout-minutes: 60
+        run: |
+          set -eu
+          f=$(ls -t PEqualNP/Outside/Dev/*.lean | head -1)
+          echo "dev file: $f"
+          mod=$(echo "${f%.lean}" | tr '/' '.')
+          echo "module: $mod"
+          lake build "$mod"

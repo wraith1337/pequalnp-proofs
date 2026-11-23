@@ -3,61 +3,41 @@ import PEqualNP.Defs
 
 namespace PEqualNP.Outside.Dev.WitTest
 
-open PEqualNP.CircuitLowerBounds PEqualNP.MetaComplexity
+private def hit (m n : ℕ) (S : Fin m → Finset (Fin n)) (B : Finset (Fin n)) : Finset (Fin m) :=
+  Finset.univ.filter (fun i => ∃ x ∈ B, x ∈ S i)
 
-private lemma edgeConsW (x : Fin 5 → Bool) (a b : ℕ) (ha : a < 5) (hb : b < 5) (es : List (ℕ × ℕ)) :
-    (∃ u v : Fin 5, (u.val, v.val) ∈ (a, b) :: es ∧ x u = true ∧ x v = true) ↔
-    (x ⟨a, ha⟩ = true ∧ x ⟨b, hb⟩ = true) ∨
-      ∃ u v : Fin 5, (u.val, v.val) ∈ es ∧ x u = true ∧ x v = true := by
-  constructor
-  · rintro ⟨u, v, h, hu, hv⟩
-    rcases List.mem_cons.mp h with h | h
-    · obtain ⟨h1, h2⟩ := Prod.mk.inj h
-      exact Or.inl ⟨(show u = ⟨a, ha⟩ from Fin.ext h1) ▸ hu, (show v = ⟨b, hb⟩ from Fin.ext h2) ▸ hv⟩
-    · exact Or.inr ⟨u, v, h, hu, hv⟩
-  · rintro (⟨h1, h2⟩ | ⟨u, v, h, hu, hv⟩)
-    · exact ⟨⟨a, ha⟩, ⟨b, hb⟩, List.mem_cons_self, h1, h2⟩
-    · exact ⟨u, v, List.mem_cons_of_mem _ h, hu, hv⟩
+private lemma hit_insert (m n : ℕ) (S : Fin m → Finset (Fin n)) (a : Fin n) (B : Finset (Fin n)) :
+    hit m n S (insert a B) = (Finset.univ.filter (fun i => a ∈ S i)) ∪ hit m n S B := by
+  ext i
+  simp only [hit, Finset.mem_filter, Finset.mem_univ, true_and, Finset.mem_union,
+    Finset.mem_insert]
+  aesop
 
-/-- x1(x0+x2) + x3(x2+x4) + x0x4 : 7 gates for the 5-cycle edge function. -/
-def c5circ : Circuit where
-  gates := [
-    ⟨.or, [0, 2]⟩,
-    ⟨.and, [1, 5]⟩,
-    ⟨.or, [2, 4]⟩,
-    ⟨.and, [3, 7]⟩,
-    ⟨.and, [0, 4]⟩,
-    ⟨.or, [6, 8]⟩,
-    ⟨.or, [10, 9]⟩
-  ]
-  output := 11
-
-theorem test587 : ∀ C : Circuit, C = c5circ → Monotone2 C ∧ C.size ≤ 7 ∧
-    (∀ x : Fin 5 → Bool, (C.eval (List.ofFn x) = true ↔
-      ∃ u v : Fin 5, (u.val, v.val) ∈ ([(0,1),(1,2),(2,3),(3,4),(4,0)] : List (ℕ × ℕ)) ∧
-        x u = true ∧ x v = true)) := by
-  rintro C rfl
-  refine ⟨?_, by decide, ?_⟩
-  · intro gate hg
-    simp only [c5circ, List.mem_cons, List.not_mem_nil, or_false] at hg
-    rcases hg with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> exact ⟨by simp, by decide⟩
-  · intro x
-    have hx : List.ofFn x = [x 0, x 1, x 2, x 3, x 4] := rfl
-    rw [hx]
-    simp only [c5circ, Circuit.eval, Circuit.wires, List.foldl_cons, List.foldl_nil,
-      List.map_cons, List.map_nil, List.cons_append, List.nil_append,
-      GateOp.eval, List.any_cons, List.any_nil, List.all_cons, List.all_nil, id_eq,
-      List.getD, List.getElem?_cons_zero, List.getElem?_cons_succ, Option.getD_some,
-      Bool.or_false, Bool.and_true]
-    rw [edgeConsW x 0 1 (by decide) (by decide)]
-    rw [edgeConsW x 1 2 (by decide) (by decide)]
-    rw [edgeConsW x 2 3 (by decide) (by decide)]
-    rw [edgeConsW x 3 4 (by decide) (by decide)]
-    rw [edgeConsW x 4 0 (by decide) (by decide)]
-    simp only [List.not_mem_nil, false_and, exists_false, or_false,
-      Bool.or_eq_true_iff, Bool.and_eq_true_iff]
-    simp only [and_or_left, or_and_right]
-    apply Iff.of_eq
-    ac_rfl
+theorem result : ∀ (m n r : ℕ) (S : Fin m → Finset (Fin n)),
+    (∀ x y : Fin n, x ≠ y → ∃ i : Fin m, x ∈ S i ∧ y ∈ S i) →
+    (∀ x : Fin n, (Finset.univ.filter (fun i : Fin m => x ∈ S i)).card = r) →
+    ∀ B : Finset (Fin n),
+      (Finset.univ.filter (fun i : Fin m => ∃ x ∈ B, x ∈ S i)).card + B.card ≤ B.card * r + 1 := by
+  intro m n r S hp hr B
+  change (hit m n S B).card + B.card ≤ B.card * r + 1
+  induction B using Finset.induction_on with
+  | empty => simp [hit]
+  | @insert a B ha ih =>
+    rw [hit_insert, Finset.card_insert_of_notMem ha]
+    by_cases hB : B.Nonempty
+    · obtain ⟨b, hb⟩ := hB
+      have hab : a ≠ b := by intro h; exact ha (h ▸ hb)
+      obtain ⟨i, hai, hbi⟩ := hp a b hab
+      have hi : i ∈ (Finset.univ.filter (fun j => a ∈ S j)) ∩ hit m n S B := by
+        simp only [Finset.mem_inter, Finset.mem_filter, Finset.mem_univ, true_and, hit]
+        exact ⟨hai, b, hb, hbi⟩
+      have hone : 1 ≤ ((Finset.univ.filter (fun j => a ∈ S j)) ∩ hit m n S B).card :=
+        Finset.one_le_card.mpr ⟨i, hi⟩
+      have hc := Finset.card_union_add_card_inter (Finset.univ.filter (fun j => a ∈ S j)) (hit m n S B)
+      rw [hr a] at hc
+      nlinarith
+    · have he : B = ∅ := Finset.not_nonempty_iff_eq_empty.mp hB
+      subst B
+      simp [hit, hr]
 
 end PEqualNP.Outside.Dev.WitTest

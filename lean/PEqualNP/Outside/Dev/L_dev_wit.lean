@@ -8,7 +8,8 @@ theorem result : ∀ (x1 : ℕ) (x2 : Fin x1 → Fin x1 → Prop) [x3 : Decidabl
   dsimp only
   intro S
   constructor
-  · simpa using (Fintype.card_coe S)
+  · simp only [Fin.addCases_right, decide_eq_true_eq]
+    exact Fintype.card_coe S
   · simp only [Fin.addCases_left, Fin.addCases_right, decide_eq_true_eq]
     rintro ⟨u, v, huv, hu, hv⟩
     exact hu ⟨v, hv, huv⟩
